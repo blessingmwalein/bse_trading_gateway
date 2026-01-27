@@ -32,8 +32,7 @@ public class FixEngineService : BackgroundService
                 SessionSettings settings = new SessionSettings(cfgPath);
                 IMessageStoreFactory storeFactory = new MemoryStoreFactory();
                 // ILogFactory logFactory = new ScreenLogFactory(settings); // ScreenLog might interfere with Web API logging
-                
-                _initiator = new SocketInitiator(_application, storeFactory, settings);
+                _initiator = new SocketInitiator(_application, storeFactory, settings, (QuickFix.Logger.ILogFactory?)null, new DefaultMessageFactory());
                 _initiator.Start();
 
                 _logger.LogInformation("FIX Engine started.");

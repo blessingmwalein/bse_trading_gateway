@@ -17,7 +17,7 @@ namespace MyFixFields
             if (DateTime.TryParseExact(val, "yyyyMMdd-HH:mm:ss.ffffff",
                 CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out DateTime dt))
             {
-                this.Obj = dt;
+                this.Value = dt;
             }
             else
             {
@@ -25,6 +25,6 @@ namespace MyFixFields
             }
         }
 
-        public DateTime ToDateTime() => (DateTime)this.Obj;
+        public DateTime ToDateTime() => (DateTime)this.Value;
     }
 }

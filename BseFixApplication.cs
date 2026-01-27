@@ -71,18 +71,17 @@ public class BseFixApplication : QuickFix.IApplication
         // BSE Specific Tag: OrderBook (30001)
         nos.SetField(new IntField(30001, int.Parse(request.OrderBook)));
 
-        _logger.LogInformation("Sending Order: {ClOrdID}", nos.ClOrdID.GetValue());
+        _logger.LogInformation("Sending Order: {ClOrdID}", nos.ClOrdID.Value);
         Session.SendToTarget(nos, new SessionID("FIXT.1.1", "ESC_MOTS", "FGW"));
     }
 
     public void CancelOrder(string origClOrdID, string symbol, char side)
     {
-        var ocr = new OrderCancelRequest(
-            new ClOrdID(Guid.NewGuid().ToString("N")),
-            new OrigClOrdID(origClOrdID),
-            new Side(side),
-            new TransactTime(DateTime.UtcNow)
-        );
+        var ocr = new OrderCancelRequest();
+        ocr.Set(new ClOrdID(Guid.NewGuid().ToString("N")));
+        ocr.Set(new OrigClOrdID(origClOrdID));
+        ocr.Set(new Side(side));
+        ocr.Set(new TransactTime(DateTime.UtcNow));
         ocr.Set(new Symbol(symbol));
 
         _logger.LogInformation("Sending Cancel Request for: {OrigClOrdID}", origClOrdID);
