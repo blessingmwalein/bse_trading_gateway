@@ -1,9 +1,11 @@
 using QuickFix;
+using QuickFixT11Client.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllers();
+builder.Services.AddSignalR();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -23,7 +25,8 @@ builder.Services.AddSwaggerGen(options =>
     // Use XML documentation
     var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
     var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
-    options.IncludeXmlComments(xmlPath);
+    if (File.Exists(xmlPath))
+        options.IncludeXmlComments(xmlPath);
 });
 
 // Register BSE FIX Application as a Singleton so both Controller and BackgroundService can use it
@@ -41,12 +44,16 @@ if (app.Environment.IsDevelopment() || true) // Always enable Swagger for now
     app.UseSwaggerUI(c =>
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "QuickFix T11 FIX Gateway API v1");
-        c.RoutePrefix = string.Empty; // Set Swagger UI at the app's root
+        // c.RoutePrefix = string.Empty; // Don't set Swagger at root if we want dashboard at root
     });
 }
 
+app.UseDefaultFiles();
+app.UseStaticFiles();
 app.UseHttpsRedirection();
 app.UseAuthorization();
+
 app.MapControllers();
+app.MapHub<FixHub>("/fixhub");
 
 app.Run();

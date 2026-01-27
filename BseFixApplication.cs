@@ -3,25 +3,50 @@ using QuickFix.Fields;
 using MyFixFields;
 using System.Collections.Concurrent;
 using QuickFix.FIX50SP2;
+using Microsoft.AspNetCore.SignalR;
+using QuickFixT11Client.Hubs;
 
 public class BseFixApplication : QuickFix.IApplication
 {
     private readonly ILogger<BseFixApplication> _logger;
+    private readonly IHubContext<FixHub> _hubContext;
     private readonly ConcurrentDictionary<string, QuickFix.Message> _orderStatus = new();
+    private readonly ConcurrentQueue<object> _messages = new();
+    private const int MaxMessages = 100;
 
-    public BseFixApplication(ILogger<BseFixApplication> logger)
+    public BseFixApplication(ILogger<BseFixApplication> logger, IHubContext<FixHub> hubContext)
     {
         _logger = logger;
+        _hubContext = hubContext;
+    }
+
+    private async void BroadcastMessage(string type, QuickFix.Message message, SessionID sessionID)
+    {
+        var msgData = new
+        {
+            Timestamp = DateTime.UtcNow,
+            Type = type,
+            MsgType = message.Header.IsSetField(Tags.MsgType) ? message.Header.GetString(Tags.MsgType) : "Unknown",
+            Content = message.ToString().Replace("\x01", "|"),
+            Session = sessionID.ToString()
+        };
+
+        _messages.Enqueue(msgData);
+        while (_messages.Count > MaxMessages) _messages.TryDequeue(out _);
+
+        await _hubContext.Clients.All.SendAsync("ReceiveFixMessage", msgData);
     }
 
     public void FromAdmin(QuickFix.Message message, SessionID sessionID)
     {
         _logger.LogInformation("FromAdmin: {Message}", message);
+        BroadcastMessage("FromAdmin", message, sessionID);
     }
 
     public void FromApp(QuickFix.Message message, SessionID sessionID)
     {
         _logger.LogInformation("FromApp: {Message}", message);
+        BroadcastMessage("FromApp", message, sessionID);
         HandleExecutionReport(message);
     }
 
@@ -32,11 +57,13 @@ public class BseFixApplication : QuickFix.IApplication
     public void ToAdmin(QuickFix.Message message, SessionID sessionID)
     {
         _logger.LogInformation("ToAdmin: {Message}", message);
+        BroadcastMessage("ToAdmin", message, sessionID);
     }
 
     public void ToApp(QuickFix.Message message, SessionID sessionID)
     {
         _logger.LogInformation("ToApp: {Message}", message);
+        BroadcastMessage("ToApp", message, sessionID);
     }
 
     private void HandleExecutionReport(QuickFix.Message message)
@@ -50,6 +77,7 @@ public class BseFixApplication : QuickFix.IApplication
     }
 
     public ConcurrentDictionary<string, QuickFix.Message> GetOrderStatuses() => _orderStatus;
+    public IEnumerable<object> GetRecentMessages() => _messages.ToArray();
 
     public void SendOrder(FixGateway.Models.OrderRequest request)
     {
