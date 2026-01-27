@@ -15,6 +15,19 @@ public class BseFixApplication : QuickFix.IApplication
     private const int MaxMessages = 100;
     private SessionID? _activeSessionID;
 
+    private static readonly Dictionary<int, string> TagNames = new()
+    {
+        { 8, "BeginString" }, { 9, "BodyLength" }, { 35, "MsgType" }, { 34, "SeqNum" },
+        { 49, "SenderCompID" }, { 52, "SendingTime" }, { 56, "TargetCompID" },
+        { 10, "CheckSum" }, { 1, "Account" }, { 11, "ClOrdID" }, { 38, "OrderQty" },
+        { 40, "OrdType" }, { 44, "Price" }, { 54, "Side" }, { 55, "Symbol" },
+        { 60, "TransactTime" }, { 150, "ExecType" }, { 39, "OrdStatus" },
+        { 17, "ExecID" }, { 37, "OrderID" }, { 151, "LeavesQty" }, { 14, "CumQty" },
+        { 6, "AvgPx" }, { 58, "Text" }, { 1137, "DefaultApplVerID" }, { 1128, "ApplVerID" },
+        { 1409, "SessionStatus" }, { 98, "EncryptMethod" }, { 108, "HeartBtInt" },
+        { 141, "ResetSeqNumFlag" }, { 30001, "OrderBook" }
+    };
+
     public BseFixApplication(ILogger<BseFixApplication> logger, IHubContext<FixHub> hubContext)
     {
         _logger = logger;
@@ -23,12 +36,16 @@ public class BseFixApplication : QuickFix.IApplication
 
     private async void BroadcastMessage(string type, QuickFix.Message message, SessionID sessionID)
     {
+        var rawString = message.ToString().Replace("\x01", "|");
+        var decoded = DecodeFixMessage(message);
+
         var msgData = new
         {
             Timestamp = DateTime.UtcNow,
             Type = type,
             MsgType = message.Header.IsSetField(Tags.MsgType) ? message.Header.GetString(Tags.MsgType) : "Unknown",
-            Content = message.ToString().Replace("\x01", "|"),
+            Raw = rawString,
+            Decoded = decoded,
             Session = sessionID.ToString()
         };
 
@@ -36,6 +53,25 @@ public class BseFixApplication : QuickFix.IApplication
         while (_messages.Count > MaxMessages) _messages.TryDequeue(out _);
 
         await _hubContextInstance.Clients.All.SendAsync("ReceiveFixMessage", msgData);
+    }
+
+    private List<object> DecodeFixMessage(QuickFix.Message message)
+    {
+        var fields = new List<object>();
+
+        // Header
+        foreach (var field in message.Header)
+            fields.Add(new { Tag = field.Key, Name = TagNames.GetValueOrDefault(field.Key, $"Tag_{field.Key}"), Value = field.Value.ToString() });
+
+        // Body
+        foreach (var field in message)
+            fields.Add(new { Tag = field.Key, Name = TagNames.GetValueOrDefault(field.Key, $"Tag_{field.Key}"), Value = field.Value.ToString() });
+
+        // Trailer
+        foreach (var field in message.Trailer)
+            fields.Add(new { Tag = field.Key, Name = TagNames.GetValueOrDefault(field.Key, $"Tag_{field.Key}"), Value = field.Value.ToString() });
+
+        return fields;
     }
 
     public void FromAdmin(QuickFix.Message message, SessionID sessionID)
