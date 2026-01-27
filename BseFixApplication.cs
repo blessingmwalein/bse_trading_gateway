@@ -9,15 +9,16 @@ using QuickFixT11Client.Hubs;
 public class BseFixApplication : QuickFix.IApplication
 {
     private readonly ILogger<BseFixApplication> _logger;
-    private readonly IHubContext<FixHub> _hubContext;
+    private readonly IHubContext<FixHub> _hubContextInstance;
     private readonly ConcurrentDictionary<string, QuickFix.Message> _orderStatus = new();
     private readonly ConcurrentQueue<object> _messages = new();
     private const int MaxMessages = 100;
+    private SessionID? _activeSessionID;
 
     public BseFixApplication(ILogger<BseFixApplication> logger, IHubContext<FixHub> hubContext)
     {
         _logger = logger;
-        _hubContext = hubContext;
+        _hubContextInstance = hubContext;
     }
 
     private async void BroadcastMessage(string type, QuickFix.Message message, SessionID sessionID)
@@ -34,7 +35,7 @@ public class BseFixApplication : QuickFix.IApplication
         _messages.Enqueue(msgData);
         while (_messages.Count > MaxMessages) _messages.TryDequeue(out _);
 
-        await _hubContext.Clients.All.SendAsync("ReceiveFixMessage", msgData);
+        await _hubContextInstance.Clients.All.SendAsync("ReceiveFixMessage", msgData);
     }
 
     public void FromAdmin(QuickFix.Message message, SessionID sessionID)
@@ -50,9 +51,23 @@ public class BseFixApplication : QuickFix.IApplication
         HandleExecutionReport(message);
     }
 
-    public void OnCreate(SessionID sessionID) => _logger.LogInformation("Session created: {SessionID}", sessionID);
-    public void OnLogon(SessionID sessionID) => _logger.LogInformation("Logon: {SessionID}", sessionID);
-    public void OnLogout(SessionID sessionID) => _logger.LogInformation("Logout: {SessionID}", sessionID);
+    public void OnCreate(SessionID sessionID)
+    {
+        _logger.LogInformation("Session created: {SessionID}", sessionID);
+        _activeSessionID = sessionID;
+    }
+
+    public void OnLogon(SessionID sessionID)
+    {
+        _logger.LogInformation("Logon: {SessionID}", sessionID);
+        _activeSessionID = sessionID;
+    }
+
+    public void OnLogout(SessionID sessionID)
+    {
+        _logger.LogInformation("Logout: {SessionID}", sessionID);
+        // Don't clear active session here so we can still try to reconnect/monitor
+    }
 
     public void ToAdmin(QuickFix.Message message, SessionID sessionID)
     {
@@ -100,7 +115,24 @@ public class BseFixApplication : QuickFix.IApplication
         nos.SetField(new IntField(30001, int.Parse(request.OrderBook)));
 
         _logger.LogInformation("Sending Order: {ClOrdID}", nos.ClOrdID.Value);
-        Session.SendToTarget(nos, new SessionID("FIXT.1.1", "ESC_MOTS", "FGW"));
+        SendToTarget(nos);
+    }
+
+    private void SendToTarget(QuickFix.Message message)
+    {
+        var sessionID = _activeSessionID ?? new SessionID("FIXT.1.1", "ESC_MOTS", "FGW");
+        
+        if (!Session.DoesSessionExist(sessionID))
+            throw new SessionNotFound($"Session {sessionID} not found. Ensure the session is correctly configured in client.cfg.");
+
+        var session = Session.LookupSession(sessionID);
+        if (session == null)
+            throw new SessionNotFound($"Session {sessionID} could not be looked up.");
+
+        if (!session.IsLoggedOn)
+            _logger.LogWarning("Sending message to session {SessionID} while it is not logged on.", sessionID);
+
+        Session.SendToTarget(message, sessionID);
     }
 
     public void CancelOrder(string origClOrdID, string symbol, char side)
@@ -113,7 +145,7 @@ public class BseFixApplication : QuickFix.IApplication
         ocr.Set(new Symbol(symbol));
 
         _logger.LogInformation("Sending Cancel Request for: {OrigClOrdID}", origClOrdID);
-        Session.SendToTarget(ocr, new SessionID("FIXT.1.1", "ESC_MOTS", "FGW"));
+        SendToTarget(ocr);
     }
 
     public void AmendOrder(string origClOrdID, FixGateway.Models.OrderRequest request)
@@ -134,6 +166,6 @@ public class BseFixApplication : QuickFix.IApplication
         ocrr.SetField(new IntField(30001, int.Parse(request.OrderBook)));
 
         _logger.LogInformation("Sending Amend Request for: {OrigClOrdID}", origClOrdID);
-        Session.SendToTarget(ocrr, new SessionID("FIXT.1.1", "ESC_MOTS", "FGW"));
+        SendToTarget(ocrr);
     }
 }
