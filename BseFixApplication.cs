@@ -25,7 +25,7 @@ public class BseFixApplication : QuickFix.IApplication
         { 17, "ExecID" }, { 37, "OrderID" }, { 151, "LeavesQty" }, { 14, "CumQty" },
         { 6, "AvgPx" }, { 58, "Text" }, { 1137, "DefaultApplVerID" }, { 1128, "ApplVerID" },
         { 1409, "SessionStatus" }, { 98, "EncryptMethod" }, { 108, "HeartBtInt" },
-        { 141, "ResetSeqNumFlag" }, { 30001, "OrderBook" }
+        { 141, "ResetSeqNumFlag" }, { 30001, "OrderBook" }, { 553, "Username" }, { 554, "Password" }
     };
 
     public BseFixApplication(ILogger<BseFixApplication> logger, IHubContext<FixHub> hubContext)
