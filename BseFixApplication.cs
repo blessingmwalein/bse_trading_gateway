@@ -91,18 +91,20 @@ public class BseFixApplication : QuickFix.IApplication
     {
         _logger.LogInformation("Session created: {SessionID}", sessionID);
         _activeSessionID = sessionID;
+        _hubContextInstance.Clients.All.SendAsync("UpdateSessionInfo", new { SessionID = sessionID.ToString(), LoggedOn = false });
     }
 
     public void OnLogon(SessionID sessionID)
     {
         _logger.LogInformation("Logon: {SessionID}", sessionID);
         _activeSessionID = sessionID;
+        _hubContextInstance.Clients.All.SendAsync("UpdateSessionInfo", new { SessionID = sessionID.ToString(), LoggedOn = true });
     }
 
     public void OnLogout(SessionID sessionID)
     {
         _logger.LogInformation("Logout: {SessionID}", sessionID);
-        // Don't clear active session here so we can still try to reconnect/monitor
+        _hubContextInstance.Clients.All.SendAsync("UpdateSessionInfo", new { SessionID = sessionID.ToString(), LoggedOn = false });
     }
 
     public void ToAdmin(QuickFix.Message message, SessionID sessionID)

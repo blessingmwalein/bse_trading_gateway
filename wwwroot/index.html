@@ -188,8 +188,12 @@
             <i class="fas fa-network-wired fa-lg" style="color: var(--accent-color);"></i>
             <h1 style="margin: 0; font-size: 1.25rem;">BSE FIX Gateway</h1>
         </div>
-        <div id="connectionStatus" class="status-badge status-disconnected">
-            Disconnected
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <div id="sessionInfo" style="font-size: 0.8rem; color: #94a3b8; font-family: monospace;">No Active Session
+            </div>
+            <div id="connectionStatus" class="status-badge status-disconnected">
+                Disconnected
+            </div>
         </div>
     </header>
 
@@ -290,6 +294,19 @@
             // Limit log entries
             if (logContainer.children.length > 200) {
                 logContainer.removeChild(logContainer.lastChild);
+            }
+        });
+
+        connection.on("UpdateSessionInfo", (info) => {
+            const sessionEl = document.getElementById('sessionInfo');
+            sessionEl.innerText = info.sessionID;
+
+            if (info.loggedOn) {
+                statusBadge.className = 'status-badge status-connected';
+                statusBadge.innerText = 'Logon Successful';
+            } else {
+                statusBadge.className = 'status-badge status-disconnected';
+                statusBadge.innerText = 'Not Logged On';
             }
         });
 
